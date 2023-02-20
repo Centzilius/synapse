@@ -291,9 +291,7 @@ class Keyring:
                 minimum_valid_until_ts=verify_request.minimum_valid_until_ts,
                 key_ids=list(key_ids_to_find),
             )
-            found_keys_by_server = await self._fetch_keys_queue.add_to_queue(
-                key_request, key=verify_request.server_name
-            )
+            found_keys_by_server = await self.fetch_keys(key_request)
 
             # Since we batch up requests the returned set of keys may contain keys
             # from other servers, so we pull out only the ones we care about.
@@ -319,6 +317,14 @@ class Keyring:
                 f"Failed to find any key to satisfy: {key_request}",
                 Codes.UNAUTHORIZED,
             )
+
+    async def fetch_keys(
+        self, key_request: _FetchKeyRequest
+    ) -> Dict[str, Dict[str, FetchKeyResult]]:
+        found_keys_by_server = await self._fetch_keys_queue.add_to_queue(
+            key_request, key=key_request.server_name
+        )
+        return found_keys_by_server
 
     async def _process_json(
         self, verify_key: VerifyKey, verify_request: VerifyJsonRequest
