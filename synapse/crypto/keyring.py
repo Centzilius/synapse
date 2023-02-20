@@ -14,9 +14,11 @@
 
 import abc
 import logging
+import random
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Tuple
 
 import attr
+import attrs
 from signedjson.key import (
     decode_verify_key_bytes,
     encode_verify_key_base64,
@@ -44,6 +46,7 @@ from synapse.config.key import TrustedKeyServer
 from synapse.events import EventBase
 from synapse.events.utils import prune_event_dict
 from synapse.logging.context import make_deferred_yieldable, run_in_background
+from synapse.replication.http.keys import ReplicationFetchKeysEndpoint
 from synapse.storage.keys import FetchKeyResult
 from synapse.types import JsonDict
 from synapse.util import unwrapFirstError
@@ -153,14 +156,22 @@ class Keyring:
         self.clock = hs.get_clock()
 
         if key_fetchers is None:
-            key_fetchers = (
-                # Fetch keys from the database.
-                StoreKeyFetcher(hs),
-                # Fetch keys from a configured Perspectives server.
-                PerspectivesKeyFetcher(hs),
-                # Fetch keys from the origin server directly.
-                ServerKeyFetcher(hs),
-            )
+            if hs.config.worker.send_federation:
+                key_fetchers = (
+                    # Fetch keys from the database.
+                    StoreKeyFetcher(hs),
+                    # Fetch keys from a configured Perspectives server.
+                    PerspectivesKeyFetcher(hs),
+                    # Fetch keys from the origin server directly.
+                    ServerKeyFetcher(hs),
+                )
+            else:
+                key_fetchers = (
+                    # Fetch keys from the database.
+                    StoreKeyFetcher(hs),
+                    # Ask a federation sender to fetch the keys for us.
+                    InternalWorkerRequestKeyFetcher(hs),
+                )
         self._key_fetchers = key_fetchers
 
         self._fetch_keys_queue: BatchingQueue[
@@ -321,6 +332,7 @@ class Keyring:
     async def fetch_keys(
         self, key_request: _FetchKeyRequest
     ) -> Dict[str, Dict[str, FetchKeyResult]]:
+        """Returns: {server name: {key id: fetch key result}}"""
         found_keys_by_server = await self._fetch_keys_queue.add_to_queue(
             key_request, key=key_request.server_name
         )
@@ -920,3 +932,31 @@ class ServerKeyFetcher(BaseV2KeyFetcher):
             response_json=response,
             time_added_ms=time_now_ms,
         )
+
+
+class InternalWorkerRequestKeyFetcher(KeyFetcher):
+    """Ask a federation_sender worker to request keys for some homeserver X."""
+
+    def __init__(self, hs: "HomeServer"):
+        super().__init__(hs)
+        self._federation_shard_config = hs.config.worker.federation_shard_config
+        self._client = ReplicationFetchKeysEndpoint.make_client(hs)
+
+    async def _fetch_keys(
+        self, keys_to_fetch: List[_FetchKeyRequest]
+    ) -> Dict[str, Dict[str, FetchKeyResult]]:
+        # For simplicity's sake, pick a random federation sender
+        instance_name = random.choice(self._federation_shard_config.instances)
+        response = self._client(
+            keys_to_fetch=[attrs.asdict(key_req) for key_req in keys_to_fetch],
+            instance_name=instance_name,
+        )
+
+        parsed_response = {
+            server_name: {
+                key_id: FetchKeyResult(**key_result)
+                for key_id, key_result in keys_for_server
+            }
+            for server_name, keys_for_server in response.items()
+        }
+        return parsed_response
