@@ -19,6 +19,7 @@ from synapse.replication.http import (
     account_data,
     devices,
     federation,
+    keys,
     login,
     membership,
     presence,
@@ -27,7 +28,7 @@ from synapse.replication.http import (
     send_event,
     send_events,
     state,
-    streams, keys,
+    streams,
 )
 
 if TYPE_CHECKING:
