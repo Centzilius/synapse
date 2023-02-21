@@ -27,7 +27,7 @@ from synapse.replication.http import (
     send_event,
     send_events,
     state,
-    streams,
+    streams, keys,
 )
 
 if TYPE_CHECKING:
@@ -52,6 +52,7 @@ class ReplicationRestResource(JsonResource):
         account_data.register_servlets(hs, self)
         push.register_servlets(hs, self)
         state.register_servlets(hs, self)
+        keys.register_servlets(hs, self)
 
         # The following can't currently be instantiated on workers.
         if hs.config.worker.worker_app is None:

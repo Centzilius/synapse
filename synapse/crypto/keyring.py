@@ -947,7 +947,7 @@ class InternalWorkerRequestKeyFetcher(KeyFetcher):
     ) -> Dict[str, Dict[str, FetchKeyResult]]:
         # For simplicity's sake, pick a random federation sender
         instance_name = random.choice(self._federation_shard_config.instances)
-        response = self._client(
+        response = await self._client(
             keys_to_fetch=[attrs.asdict(key_req) for key_req in keys_to_fetch],
             instance_name=instance_name,
         )

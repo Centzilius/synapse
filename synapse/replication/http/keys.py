@@ -19,6 +19,7 @@ import attrs
 
 from twisted.web.server import Request
 
+from synapse.http.server import HttpServer
 from synapse.replication.http._base import ReplicationEndpoint
 from synapse.types import JsonDict
 from synapse.util.async_helpers import yieldable_gather_results
@@ -64,6 +65,7 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
     NAME = "fetch_keys"
     PATH_ARGS = ()
     METHOD = "POST"
+    WAIT_FOR_STREAMS = False
 
     def __init__(self, hs: "HomeServer"):
         super().__init__(hs)
@@ -94,5 +96,10 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
         logger.info("DMR: %s", json.dumps(merged_results))
         return (200, merged_results)
 
-    def _serialize_payload(self, *, keys_to_fetch: "_FetchKeyRequest") -> JsonDict:  # type: ignore[override]
+    @staticmethod
+    async def _serialize_payload(*, keys_to_fetch: "_FetchKeyRequest") -> JsonDict:  # type: ignore[override]
         return {"keys_to_fetch": keys_to_fetch}
+
+
+def register_servlets(hs: "HomeServer", http_server: HttpServer) -> None:
+    ReplicationFetchKeysEndpoint(hs).register(http_server)
