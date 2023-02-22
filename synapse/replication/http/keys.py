@@ -13,19 +13,19 @@
 # limitations under the License.
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
-import attrs
+import attr
 
 from twisted.web.server import Request
 
+from synapse.crypto.types import _FetchKeyRequest
 from synapse.http.server import HttpServer
 from synapse.replication.http._base import ReplicationEndpoint
 from synapse.types import JsonDict
 from synapse.util.async_helpers import yieldable_gather_results
 
 if TYPE_CHECKING:
-    from synapse.crypto.keyring import Keyring, _FetchKeyRequest
     from synapse.server import HomeServer
 
 logger = logging.getLogger(__file__)
@@ -70,7 +70,7 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
     def __init__(self, hs: "HomeServer"):
         super().__init__(hs)
 
-        self._keyring: "Keyring" = hs.get_keyring()
+        self._keyring = hs.get_keyring()
 
     async def _handle_request(  # type: ignore[override]
         self,
@@ -91,14 +91,14 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
             for server_name, keys_for_server in result.items():
                 merged_results.setdefault(server_name, {})
                 for key_id, key_result in keys_for_server.items():
-                    merged_results[server_name][key_id] = attrs.asdict(key_result)
+                    merged_results[server_name][key_id] = attr.asdict(key_result)
 
         logger.info("DMR: %s", json.dumps(merged_results))
         return (200, merged_results)
 
     @staticmethod
-    async def _serialize_payload(*, keys_to_fetch: "_FetchKeyRequest") -> JsonDict:  # type: ignore[override]
-        return {"keys_to_fetch": keys_to_fetch}
+    async def _serialize_payload(*, keys_to_fetch: List[_FetchKeyRequest]) -> JsonDict:  # type: ignore[override]
+        return {"keys_to_fetch": [attr.asdict(key) for key in keys_to_fetch]}
 
 
 def register_servlets(hs: "HomeServer", http_server: HttpServer) -> None:
