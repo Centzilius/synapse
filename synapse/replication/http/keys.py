@@ -64,7 +64,6 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
     NAME = "fetch_keys"
     PATH_ARGS = ()
     METHOD = "POST"
-    WAIT_FOR_STREAMS = False
 
     def __init__(self, hs: "HomeServer"):
         super().__init__(hs)

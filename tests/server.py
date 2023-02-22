@@ -532,6 +532,9 @@ class ThreadedMemoryReactorClock(MemoryReactorClock):
         if callback:
             callback()
 
+        logger.warning("DMR: ThreadedMemoryReactorClock.connectTCP: return %s", conn)
+        # if port == 1001:
+        # breakpoint()
         return conn
 
     def advance(self, amount: float) -> None:

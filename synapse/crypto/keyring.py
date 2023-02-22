@@ -18,7 +18,6 @@ import random
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Tuple
 
 import attr
-
 from signedjson.key import (
     decode_verify_key_bytes,
     encode_verify_key_base64,
@@ -367,7 +366,6 @@ class Keyring:
         Returns:
             {server name: {key id: fetch key result}}
         """
-
         logger.debug("Starting fetch for %s", requests)
 
         # First we need to deduplicate requests for the same key. We do this by
@@ -439,6 +437,7 @@ class Keyring:
                 break
 
             logger.debug("Getting keys from %s for %s", fetcher, verify_request)
+            print("DMR: Getting keys from %s for %s" % (fetcher, verify_request))
             keys = await fetcher.get_keys(
                 verify_request.server_name,
                 list(missing_key_ids),
@@ -695,7 +694,7 @@ class PerspectivesKeyFetcher(BaseV2KeyFetcher):
                 the server
         """
         perspective_name = key_server.server_name
-        logger.info(
+        print(
             "Requesting keys %s from notary server %s",
             keys_to_fetch,
             perspective_name,
@@ -723,13 +722,13 @@ class PerspectivesKeyFetcher(BaseV2KeyFetcher):
             )
         except (NotRetryingDestination, RequestSendFailed) as e:
             # these both have str() representations which we can't really improve upon
+            print("DMR:", e)
             raise KeyLookupError(str(e))
         except HttpResponseException as e:
+            print("DMR:", e)
             raise KeyLookupError("Remote server returned an error: %s" % (e,))
 
-        logger.debug(
-            "Response from notary server %s: %s", perspective_name, query_response
-        )
+        print("Response from notary server %s: %s", perspective_name, query_response)
 
         keys: Dict[str, Dict[str, FetchKeyResult]] = {}
         added_keys: List[Tuple[str, str, FetchKeyResult]] = []
@@ -876,6 +875,7 @@ class ServerKeyFetcher(BaseV2KeyFetcher):
         Raises:
             KeyLookupError if there was a problem making the lookup
         """
+        print("DMR: get_server_verify_keys_v2_direct starting")
         time_now_ms = self.clock.time_msec()
         try:
             response = await self.client.get_json(
@@ -902,6 +902,7 @@ class ServerKeyFetcher(BaseV2KeyFetcher):
         except HttpResponseException as e:
             raise KeyLookupError("Remote server returned an error: %s" % (e,))
 
+        print("DMR: get_server_verify_keys_v2_direct got", response)
         assert isinstance(response, dict)
         if response["server_name"] != server_name:
             raise KeyLookupError(
@@ -935,6 +936,7 @@ class InternalWorkerRequestKeyFetcher(StoreKeyFetcher):
     ) -> Dict[str, Dict[str, FetchKeyResult]]:
         # For simplicity's sake, pick a random federation sender
         instance_name = random.choice(self._federation_shard_config.instances)
+        print("DMR: ask", instance_name, "for", keys_to_fetch)
         response = await self._client(
             keys_to_fetch=keys_to_fetch,
             instance_name=instance_name,
@@ -942,5 +944,5 @@ class InternalWorkerRequestKeyFetcher(StoreKeyFetcher):
         logger.info(
             "%s fetched %s keys for us", instance_name, response["fetched_count"]
         )
-
+        print("DMR:", instance_name, "replied:", response)
         return await super()._fetch_keys(keys_to_fetch)

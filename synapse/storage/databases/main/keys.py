@@ -21,6 +21,7 @@ from signedjson.key import decode_verify_key_bytes
 
 from synapse.storage._base import SQLBaseStore
 from synapse.storage.database import LoggingTransaction
+from synapse.storage.databases.main import CacheInvalidationWorkerStore
 from synapse.storage.keys import FetchKeyResult
 from synapse.storage.types import Cursor
 from synapse.util.caches.descriptors import cached, cachedList
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 db_binary_type = memoryview
 
 
-class KeyStore(SQLBaseStore):
+class KeyStore(CacheInvalidationWorkerStore):
     """Persistence for signature verification keys"""
 
     @cached()
@@ -105,10 +106,12 @@ class KeyStore(SQLBaseStore):
                 keys to be stored. Each entry is a triplet of
                 (server_name, key_id, key).
         """
+        print("DMR: store_server_verify_keys")
         key_values = []
         value_values = []
         invalidations = []
         for server_name, key_id, fetch_result in verify_keys:
+            logger.warning(f"DMR: {server_name=} {key_id=} {fetch_result=}")
             key_values.append((server_name, key_id))
             value_values.append(
                 (
@@ -136,10 +139,8 @@ class KeyStore(SQLBaseStore):
             value_values=value_values,
             desc="store_server_verify_keys",
         )
-
-        invalidate = self._get_server_verify_key.invalidate
         for i in invalidations:
-            invalidate((i,))
+            await self.invalidate_cache_and_stream("_get_server_verify_key", (i,))
 
     async def store_server_keys_json(
         self,

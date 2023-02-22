@@ -355,6 +355,7 @@ class CacheInvalidationWorkerStore(SQLBaseStore):
     async def send_invalidation_to_replication(
         self, cache_name: str, keys: Optional[Collection[Any]]
     ) -> None:
+        print("DMR: send_invalidation_to_replication")
         await self.db_pool.runInteraction(
             "send_invalidation_to_replication",
             self._send_invalidation_to_replication,

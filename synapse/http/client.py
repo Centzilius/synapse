@@ -429,6 +429,7 @@ class SimpleHttpClient:
             try:
                 body_producer = None
                 if data is not None:
+                    print("SimpleHTTPClient.request data=", data)
                     body_producer = QuieterFileBodyProducer(
                         BytesIO(data),
                         cooperator=self._cooperator,
@@ -565,9 +566,11 @@ class SimpleHttpClient:
         if headers:
             actual_headers.update(headers)  # type: ignore
 
+        logger.warning("DMR: before request")
         response = await self.request(
             "POST", uri, headers=Headers(actual_headers), data=json_str
         )
+        logger.warning("DMR: after request")
 
         body = await make_deferred_yieldable(readBody(response))
 

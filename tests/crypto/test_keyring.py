@@ -34,6 +34,7 @@ from synapse.crypto.keyring import (
     PerspectivesKeyFetcher,
     ServerKeyFetcher,
     StoreKeyFetcher,
+    InternalWorkerRequestKeyFetcher,
 )
 from synapse.logging.context import (
     ContextRequest,
@@ -50,7 +51,7 @@ from synapse.util.httpresourcetree import create_resource_tree
 
 from tests import unittest
 from tests.replication._base import BaseMultiWorkerStreamTestCase
-from tests.server import make_request
+from tests.server import make_request, TimedOutException
 from tests.test_utils import make_awaitable
 from tests.unittest import logcontext_clean, override_config
 
@@ -804,7 +805,7 @@ class InternalWorkerRequestKeyFetcherTestCase(BaseMultiWorkerStreamTestCase):
             """Mock the request to the notary server."""
             if kwargs.get("path") != "/_matrix/key/v2/query":
                 raise HttpResponseException(500, "ruh", b"roh")
-            return {}
+            return {"server_keys": []}
 
         async def mock_get_json(*args: Any, **kwargs: Any) -> JsonDict:
             if kwargs.get("path") != "/_matrix/key/v2/server":
@@ -823,21 +824,11 @@ class InternalWorkerRequestKeyFetcherTestCase(BaseMultiWorkerStreamTestCase):
             federation_http_client=mock_http_client,
         )
 
-        channel = make_request(
-            self.reactor,
-            self.site,
-            "POST",
-            "/_matrix/key/v2/query",
-            access_token=None,
-            content=json.dumps({"server_keys": {SERVER_NAME: {testverifykey_id: {}}}}),
+        fetcher = InternalWorkerRequestKeyFetcher(self.hs)
+        result = self.get_success(
+            fetcher.get_keys(SERVER_NAME, [testverifykey_id], 0), by=0.1
         )
-        print(channel.json_body)
-        # fetcher = InternalWorkerRequestKeyFetcher(self.hs)
-        # d = fetcher.get_keys(SERVER_NAME, [testverifykey_id], 6000)
-        # for _ in range(1000):
-        #     self.reactor.advance(0.1)
-        # result = self.get_success(d)
-        # print(result)
+        print(result)
 
 
 def get_key_id(key: SigningKey) -> str:

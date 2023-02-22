@@ -20,7 +20,7 @@ from signedjson.sign import sign_json
 
 from twisted.web.server import Request
 
-from synapse.crypto.keyring import ServerKeyFetcher
+from synapse.crypto.keyring import InternalWorkerRequestKeyFetcher
 from synapse.http.server import HttpServer
 from synapse.http.servlet import (
     RestServlet,
@@ -94,7 +94,7 @@ class RemoteKey(RestServlet):
     """
 
     def __init__(self, hs: "HomeServer"):
-        self.fetcher = ServerKeyFetcher(hs)
+        self.fetcher = InternalWorkerRequestKeyFetcher(hs)
         self.store = hs.get_datastores().main
         self.clock = hs.get_clock()
         self.federation_domain_whitelist = (
@@ -238,6 +238,7 @@ class RemoteKey(RestServlet):
         # If there is a cache miss, request the missing keys, then recurse (and
         # ensure the result is sent).
         if cache_misses:
+            print("DMR: fetch keys remotely for", cache_misses)
             await yieldable_gather_results(
                 lambda t: self.fetcher.get_keys(*t),
                 (

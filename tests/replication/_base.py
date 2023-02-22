@@ -415,6 +415,7 @@ class BaseMultiWorkerStreamTestCase(unittest.HomeserverTestCase):
         # Set up the server side protocol
         server_address = IPv4Address("TCP", host, port)
         channel = self._hs_to_site[hs].buildProtocol((host, port))
+        logger.warning("DMR: _handle_http_replication_attempt channel=%s", channel)
 
         # Connect client to server and vice versa.
         client_to_server_transport = FakeTransport(
