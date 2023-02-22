@@ -916,8 +916,14 @@ class ServerKeyFetcher(BaseV2KeyFetcher):
         )
 
 
-class InternalWorkerRequestKeyFetcher(KeyFetcher):
-    """Ask a federation_sender worker to request keys for some homeserver X."""
+class InternalWorkerRequestKeyFetcher(StoreKeyFetcher):
+    """Ask a federation_sender worker to request keys for some homeserver X.
+
+    The federation sender worker will store any keys it manages to fetch in the DB.
+    It could pass us those directly, but that would involve JSON-serialising
+    nacl.signing.VerifyKey objects which requires some thought. Instead, retry the DB
+    ourselves.
+    """
 
     def __init__(self, hs: "HomeServer"):
         super().__init__(hs)
@@ -933,12 +939,8 @@ class InternalWorkerRequestKeyFetcher(KeyFetcher):
             keys_to_fetch=keys_to_fetch,
             instance_name=instance_name,
         )
+        logger.info(
+            "%s fetched %s keys for us", instance_name, response["fetched_count"]
+        )
 
-        parsed_response = {
-            server_name: {
-                key_id: FetchKeyResult(**key_result)
-                for key_id, key_result in keys_for_server
-            }
-            for server_name, keys_for_server in response.items()
-        }
-        return parsed_response
+        return await super()._fetch_keys(keys_to_fetch)

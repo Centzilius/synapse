@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
 import logging
 from typing import TYPE_CHECKING, Dict, List, Tuple
 
@@ -22,6 +21,7 @@ from twisted.web.server import Request
 from synapse.crypto.types import _FetchKeyRequest
 from synapse.http.server import HttpServer
 from synapse.replication.http._base import ReplicationEndpoint
+from synapse.storage.keys import FetchKeyResult
 from synapse.types import JsonDict
 from synapse.util.async_helpers import yieldable_gather_results
 
@@ -47,18 +47,17 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
             ]
         }
 
-    Returning
+    We would normally return a group of FetchKeyResponse structs like the
+    normal code path does, but FetchKeyResponse holds a nacl.signing.VerifyKey
+    which is not JSON-serialisable. Instead, for each requested key we respond
+    with a boolean: `true` meaning we fetched this key, and `false` meaning we
+    didn't.
+
+    The response takes the form:
 
         200 OK
-
         {
-            "example.com": {
-                "ABC": {
-                    "verify_key": ...
-                    "valid_until_ts": 01189998819991197253,
-                },
-                "DEF": {},
-            }
+            "fetched_count": 1
         }
     """
 
@@ -81,20 +80,24 @@ class ReplicationFetchKeysEndpoint(ReplicationEndpoint):
             _FetchKeyRequest(**entry) for entry in content["keys_to_fetch"]
         ]
 
-        results = await yieldable_gather_results(
+        results: List[
+            Dict[str, Dict[str, FetchKeyResult]]
+        ] = await yieldable_gather_results(
             self._keyring.fetch_keys,
             parsed_requests,
         )
 
-        merged_results: Dict[str, Dict[str, JsonDict]] = {}
-        for result in results:
-            for server_name, keys_for_server in result.items():
-                merged_results.setdefault(server_name, {})
-                for key_id, key_result in keys_for_server.items():
-                    merged_results[server_name][key_id] = attr.asdict(key_result)
+        # We don't send the results back to the requesting worker directly.
+        # Doing so would mean faffing around trying to JSON-serialise a
+        # nacl.signing.VerifyKey, which isn't our business to do. Instead, just say
+        # how many keys we fetched.
+        fetched_count = sum(
+            len(keys_for_server)
+            for entry in results
+            for server_name, keys_for_server in entry.items()
+        )
 
-        logger.info("DMR: %s", json.dumps(merged_results))
-        return (200, merged_results)
+        return 200, {"fetched_count": fetched_count}
 
     @staticmethod
     async def _serialize_payload(*, keys_to_fetch: List[_FetchKeyRequest]) -> JsonDict:  # type: ignore[override]
